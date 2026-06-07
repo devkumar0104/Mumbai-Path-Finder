@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Mumbai — Path Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+<style>
+:root {
+  --glass-bg: rgba(255,255,255,0.18);
+  --glass-bg-heavy: rgba(255,255,255,0.32);
+  --glass-bg-ultra: rgba(255,255,255,0.55);
+  --glass-border: rgba(255,255,255,0.45);
+  --glass-border-light: rgba(255,255,255,0.25);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5);
+  --glass-shadow-xl: 0 20px 60px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.55);
+  --glass-shadow-sm: 0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.45);
+  --apple-blue: #007AFF;
+  --apple-blue-light: #5AC8FA;
+  --apple-green: #34C759;
+  --apple-orange: #FF9500;
+  --apple-red: #FF3B30;
+  --apple-purple: #AF52DE;
+  --apple-teal: #5AC8FA;
+  --text-primary: rgba(0,0,0,0.85);
+  --text-secondary: rgba(0,0,0,0.55);
+  --text-tertiary: rgba(0,0,0,0.35);
+  --text-white: rgba(255,255,255,0.95);
+  --text-white-secondary: rgba(255,255,255,0.65);
+  --transition: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --sidebar-width: clamp(260px, 22vw, 320px);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+}
+#app {
+  width: 100vw; height: 100vh;
+  position: relative;
+  background: radial-gradient(ellipse 120% 80% at 70% 40%, #c8dfc8 0%, #b8d4c0 25%, #9ec4b5 50%, #85b5c8 75%, #6a9fb5 100%);
+  overflow: hidden;
+}
+.terrain-lines {
+  position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0px, transparent 40px, rgba(255,255,255,0.025) 40px, rgba(255,255,255,0.025) 41px),
+    repeating-linear-gradient(-45deg, transparent 0px, transparent 60px, rgba(0,0,0,0.015) 60px, rgba(0,0,0,0.015) 61px);
+  z-index: 0;
+}
+#cy {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent !important;
+}
+/* SIDEBAR */
+#sidebar {
+  position: absolute;
+  left: clamp(8px, 1vw, 16px);
+  top: clamp(8px, 1vh, 16px);
+  bottom: clamp(8px, 1vh, 16px);
+  width: var(--sidebar-width);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 0.8vh, 12px);
+  overflow: hidden;
+}
+.glass-panel {
+  background: var(--glass-bg-ultra);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
+  z-index: 1;
+}
+.glass-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(255,255,255,0.05) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* HEADER */
+#header-panel { padding: clamp(10px,1.2vh,18px) clamp(12px,1.2vw,20px) clamp(8px,1vh,14px); }
+.app-title { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+.app-icon {
+  width: clamp(26px,2.5vw,32px); height: clamp(26px,2.5vw,32px);
+  background: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,122,255,0.4);
+  flex-shrink: 0;
+}
+.app-icon svg { width: 16px; height: 16px; fill: white; }
+.title-text h1 { font-size: clamp(13px,1.2vw,17px); font-weight: 600; color: var(--text-primary); letter-spacing: -0.3px; line-height: 1.2; }
+.title-text p { font-size: clamp(10px,0.9vw,12px); color: var(--text-secondary); font-weight: 400; }
+.status-bar { display: flex; align-items: center; gap: 8px; padding: clamp(4px,0.5vh,8px) clamp(12px,1.2vw,20px) clamp(4px,0.5vh,8px); }
+.status-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--apple-green); box-shadow: 0 0 5px rgba(52,199,89,0.6); flex-shrink:0; }
+.status-text { font-size: clamp(10px,0.85vw,11px); color: var(--text-secondary); }
+.info-chips { display: flex; gap: 5px; flex-wrap: wrap; padding: 0 clamp(12px,1.2vw,16px) clamp(6px,0.7vh,10px); }
+.chip { padding: 3px 8px; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.55); border-radius: 20px; font-size: clamp(9px,0.8vw,11px); font-weight: 500; color: var(--text-secondary); }
+.chip.highlight { background: rgba(0,122,255,0.1); border-color: rgba(0,122,255,0.2); color: var(--apple-blue); }
+.progress-steps { display: flex; align-items: center; padding: 0 clamp(12px,1.2vw,16px) clamp(8px,0.9vh,12px); }
+.prog-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(0,0,0,0.15); transition: background 0.3s, transform 0.3s var(--spring); flex-shrink:0; }
+.prog-dot.done { background: var(--apple-blue); }
+.prog-dot.active { background: var(--apple-green); transform: scale(1.4); }
+.prog-line { flex: 1; height: 2px; background: rgba(0,0,0,0.1); border-radius: 1px; overflow: hidden; }
+.prog-fill { height: 100%; width: 0%; background: var(--apple-blue); border-radius: 1px; transition: width 0.5s var(--transition); }
+
+/* SEARCH PANEL */
+#search-panel { padding: clamp(8px,1vh,14px) clamp(12px,1.2vw,16px); }
+.search-field {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 12px;
+  padding: clamp(7px,0.8vh,10px) clamp(10px,1vw,14px);
+  margin-bottom: clamp(6px,0.7vh,10px);
+  transition: all 0.2s var(--transition);
+  cursor: pointer; position: relative;
+}
+.search-field:hover { background: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.8); }
+.search-field.active { background: rgba(255,255,255,0.7); border-color: var(--apple-blue); box-shadow: 0 0 0 3px rgba(0,122,255,0.15); }
+.search-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot-start { background: var(--apple-green); box-shadow: 0 0 6px rgba(52,199,89,0.5); }
+.dot-end { background: var(--apple-red); box-shadow: 0 0 6px rgba(255,59,48,0.5); }
+.search-input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-size: clamp(12px,1vw,14px); color: var(--text-primary);
+  font-family: inherit; font-weight: 400;
+}
+.search-input::placeholder { color: var(--text-secondary); font-weight: 400; }
+.search-input.filled { color: var(--text-primary); font-weight: 500; }
+.search-connector { display: flex; align-items: center; padding: 0 14px; margin: -4px 0; gap: 14px; }
+.connector-line { width: 1px; height: 14px; background: linear-gradient(to bottom, var(--apple-green), var(--apple-red)); margin-left: 4px; }
+/* Autocomplete dropdown */
+.autocomplete-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 200; overflow: hidden;
+  max-height: 180px; overflow-y: auto;
+  margin-top: 4px;
+}
+.autocomplete-item {
+  padding: 8px 12px; cursor: pointer;
+  font-size: clamp(11px,0.95vw,13px); color: var(--text-primary);
+  display: flex; align-items: center; gap: 8px;
+  transition: background 0.1s;
+}
+.autocomplete-item:hover, .autocomplete-item.highlighted { background: rgba(0,122,255,0.08); }
+.autocomplete-item .item-area { font-size: 10px; color: var(--text-secondary); margin-left: auto; }
+
+.route-options { display: flex; gap: clamp(4px,0.5vw,8px); margin-top: clamp(6px,0.7vh,10px); }
+.route-mode-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: clamp(5px,0.6vh,8px) 4px;
+  background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5);
+  border-radius: 10px; cursor: pointer; transition: all 0.2s var(--spring);
+  font-size: clamp(8px,0.75vw,10px); font-weight: 500; color: var(--text-secondary);
+}
+.route-mode-btn.active { background: var(--apple-blue); border-color: var(--apple-blue); color: white; box-shadow: 0 2px 10px rgba(0,122,255,0.35); transform: scale(1.03); }
+.route-mode-btn:hover:not(.active) { background: rgba(255,255,255,0.55); transform: scale(1.02); }
+.route-mode-btn svg { width: clamp(14px,1.4vw,18px); height: clamp(14px,1.4vw,18px); }
+
+/* ALGO PANEL */
+#algo-panel { padding: clamp(8px,1vh,14px) clamp(12px,1.2vw,16px); }
+.section-label { font-size: clamp(9px,0.8vw,11px); font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: clamp(6px,0.7vh,10px); }
+.algo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(4px,0.5vw,8px); }
+.algo-btn { padding: clamp(7px,0.8vh,10px) 8px; background: rgba(255,255,255,0.35); border: 1px solid rgba(255,255,255,0.5); border-radius: 12px; cursor: pointer; transition: all 0.2s var(--spring); text-align: left; }
+.algo-btn.active { background: rgba(0,122,255,0.12); border-color: rgba(0,122,255,0.35); }
+.algo-btn:hover:not(.active) { background: rgba(255,255,255,0.5); }
+.algo-name { font-size: clamp(11px,1vw,13px); font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 2px; }
+.algo-btn.active .algo-name { color: var(--apple-blue); }
+.algo-desc { font-size: clamp(9px,0.8vw,10px); color: var(--text-secondary); display: block; line-height: 1.4; }
+.graph-stat-row { display: flex; justify-content: space-between; align-items: center; padding: clamp(4px,0.5vh,8px) 0; }
+.graph-stat-row + .graph-stat-row { border-top: 1px solid rgba(0,0,0,0.05); }
+.gstat-label { font-size: clamp(10px,0.9vw,12px); color: var(--text-secondary); }
+.gstat-value { font-size: clamp(10px,0.9vw,12px); font-weight: 600; color: var(--text-primary); }
+
+/* STATS PANEL */
+#stats-panel { padding: clamp(8px,1vh,16px); display: none; }
+#stats-panel.visible { display: block; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(4px,0.5vw,8px); margin-bottom: clamp(6px,0.7vh,12px); }
+.stat-card { background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); border-radius: 12px; padding: clamp(6px,0.7vh,10px) clamp(8px,0.8vw,12px); }
+.stat-value { font-size: clamp(14px,1.4vw,20px); font-weight: 600; color: var(--text-primary); line-height: 1.1; letter-spacing: -0.5px; }
+.stat-unit { font-size: clamp(10px,0.9vw,13px); font-weight: 400; }
+.stat-label { font-size: clamp(9px,0.8vw,11px); color: var(--text-secondary); margin-top: 2px; }
+
+/* DIRECTIONS */
+#directions-panel { flex: 1; overflow: hidden; display: none; flex-direction: column; min-height: 0; min-height: clamp(60px, 8vh, 120px); }
+#directions-panel.visible { display: flex; }
+.directions-header { padding: clamp(8px,1vh,14px) clamp(12px,1.2vw,16px) clamp(6px,0.7vh,10px); font-size: clamp(9px,0.8vw,11px); font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; flex-shrink: 0; }
+.directions-list { overflow-y: auto; padding: 0 clamp(8px,0.8vw,12px) clamp(8px,1vh,12px); flex: 1; }
+.directions-list::-webkit-scrollbar { width: 3px; }
+.directions-list::-webkit-scrollbar-track { background: transparent; }
+.directions-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+.direction-item { display: flex; align-items: flex-start; gap: 8px; padding: clamp(6px,0.7vh,10px); border-radius: 10px; margin-bottom: 3px; cursor: pointer; opacity: 0; transform: translateX(-10px); transition: opacity 0.3s ease, transform 0.3s ease, background 0.15s; }
+.direction-item.revealed { opacity: 1; transform: translateX(0); }
+.direction-item:hover { background: rgba(255,255,255,0.35); }
+.direction-item.active-step { background: rgba(0,122,255,0.1); border: 1px solid rgba(0,122,255,0.2); }
+.step-icon { width: 26px; height: 26px; border-radius: 8px; background: rgba(0,122,255,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.step-icon svg { width: 13px; height: 13px; }
+.step-info { flex: 1; }
+.step-name { font-size: clamp(11px,0.95vw,13px); font-weight: 500; color: var(--text-primary); line-height: 1.3; }
+.step-detail { font-size: clamp(9px,0.8vw,11px); color: var(--text-secondary); margin-top: 2px; }
+.step-dist { font-size: clamp(10px,0.9vw,12px); font-weight: 600; color: var(--apple-blue); flex-shrink: 0; margin-top: 2px; }
+
+/* ACTIONS */
+#actions-panel-container { }
+#actions-panel-container > div { padding: clamp(8px,1vh,12px) clamp(12px,1.2vw,16px); display: flex; gap: clamp(4px,0.5vw,8px); }
+.action-btn { flex: 1; padding: clamp(7px,0.8vh,11px) 8px; border-radius: 12px; border: none; font-size: clamp(11px,0.95vw,13px); font-weight: 600; cursor: pointer; transition: all 0.2s var(--spring); display: flex; align-items: center; justify-content: center; gap: 4px; }
+.action-btn:active { transform: scale(0.96); }
+.btn-primary { background: var(--apple-blue); color: white; box-shadow: 0 2px 10px rgba(0,122,255,0.3); }
+.btn-primary:hover { background: #0066DD; }
+.btn-secondary { background: rgba(255,255,255,0.45); border: 1px solid rgba(255,255,255,0.55); color: var(--text-secondary); }
+.btn-secondary:hover { background: rgba(255,255,255,0.6); color: var(--text-primary); }
+.btn-danger { background: rgba(255,59,48,0.1); border: 1px solid rgba(255,59,48,0.2); color: var(--apple-red); }
+.btn-danger:hover { background: rgba(255,59,48,0.18); }
+
+/* TOP BAR */
+#topbar { position: absolute; top: clamp(8px,1vh,16px); right: clamp(8px,1vw,16px); display: flex; gap: 10px; z-index: 100; }
+.topbar-btn {
+  width: clamp(36px,3.5vw,44px); height: clamp(36px,3.5vw,44px);
+  background: var(--glass-bg-ultra);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  box-shadow: var(--glass-shadow-sm);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s var(--spring); position: relative;
+}
+.topbar-btn::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; border-radius: 50% 50% 0 0; background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent); pointer-events: none; }
+.topbar-btn:hover { transform: scale(1.08); box-shadow: var(--glass-shadow); }
+.topbar-btn:active { transform: scale(0.94); }
+.topbar-btn svg { width: 16px; height: 16px; }
+
+/* COMPASS */
+#compass { position: absolute; right: clamp(8px,1vw,16px); bottom: clamp(80px,9vh,100px); z-index: 100; }
+.compass-btn { width: clamp(36px,3.5vw,44px); height: clamp(36px,3.5vw,44px); background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: 1px solid var(--glass-border); border-radius: 50%; box-shadow: var(--glass-shadow-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s var(--spring); position: relative; }
+.compass-btn::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; border-radius: 50% 50% 0 0; background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent); pointer-events: none; }
+.compass-needle { transition: transform 0.4s var(--spring); }
+
+/* ZOOM */
+#zoom-controls { position: absolute; right: clamp(8px,1vw,16px); bottom: clamp(130px,15vh,160px); z-index: 100; display: flex; flex-direction: column; gap: 1px; background: var(--glass-border); border-radius: 14px; overflow: hidden; box-shadow: var(--glass-shadow-sm); }
+.zoom-btn { width: clamp(36px,3.5vw,44px); height: clamp(36px,3.5vw,44px); background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s; font-size: 20px; color: var(--text-primary); font-weight: 300; }
+.zoom-btn:hover { background: rgba(255,255,255,0.7); }
+.zoom-btn:active { background: rgba(255,255,255,0.5); }
+
+/* NODE TOOLTIP */
+#node-tooltip { position: fixed; z-index: 200; pointer-events: none; opacity: 0; transform: translateY(4px) scale(0.96); transition: all 0.18s var(--spring); }
+#node-tooltip.visible { opacity: 1; transform: translateY(0) scale(1); }
+.tooltip-bubble { background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: 1px solid var(--glass-border); border-radius: 14px; padding: 10px 14px; box-shadow: var(--glass-shadow); min-width: 160px; position: relative; }
+.tooltip-bubble::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent); }
+.tooltip-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 3px; }
+.tooltip-meta { font-size: 11px; color: var(--text-secondary); }
+.tooltip-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; margin-top: 5px; }
+.badge-start { background: rgba(52,199,89,0.15); color: #25A244; }
+.badge-end { background: rgba(255,59,48,0.15); color: #D62B20; }
+.badge-route { background: rgba(0,122,255,0.12); color: #005FBF; }
+
+/* ROUTE CARD */
+#route-card {
+  position: absolute;
+  bottom: clamp(8px,1vh,16px);
+  left: calc(var(--sidebar-width) + clamp(8px,1vw,16px) + clamp(8px,1vw,16px));
+  right: clamp(60px,7vw,76px);
+  z-index: 100;
+  transform: translateY(120%);
+  transition: transform 0.4s var(--spring);
+}
+#route-card.visible { transform: translateY(0); }
+.route-card-inner { background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: 1px solid var(--glass-border); border-radius: 20px; padding: clamp(10px,1.2vh,16px) clamp(14px,1.4vw,20px); box-shadow: var(--glass-shadow-xl); position: relative; }
+.route-card-inner::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent); border-radius: 20px 20px 0 0; }
+.route-summary { display: flex; align-items: center; gap: 12px; margin-bottom: clamp(6px,0.8vh,12px); }
+.route-icon-lg { width: 40px; height: 40px; background: linear-gradient(135deg, var(--apple-blue) 0%, #5AC8FA 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,122,255,0.35); flex-shrink: 0; }
+.route-icon-lg svg { width: 20px; height: 20px; fill: white; }
+.route-headline { flex: 1; }
+.route-from-to { font-size: clamp(10px,0.9vw,13px); color: var(--text-secondary); margin-bottom: 2px; }
+.route-name { font-size: clamp(13px,1.2vw,16px); font-weight: 600; color: var(--text-primary); letter-spacing: -0.3px; }
+.route-metrics { display: flex; gap: 8px; }
+.metric { display: flex; align-items: center; gap: 6px; padding: clamp(5px,0.6vh,8px) clamp(8px,0.8vw,12px); background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); border-radius: 10px; flex: 1; }
+.metric-icon { font-size: 13px; }
+.metric-value { font-size: clamp(12px,1.1vw,15px); font-weight: 600; color: var(--text-primary); letter-spacing: -0.3px; }
+.metric-label { font-size: clamp(9px,0.8vw,10px); color: var(--text-secondary); margin-top: 1px; }
+.route-card-actions { display: flex; gap: 8px; margin-top: clamp(6px,0.8vh,12px); }
+
+/* LEGEND */
+#legend { position: absolute; right: clamp(8px,1vw,16px); top: clamp(60px,7vh,72px); z-index: 100; display: none; }
+#legend.visible { display: block; }
+.legend-inner { background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: 1px solid var(--glass-border); border-radius: 14px; padding: clamp(8px,0.9vh,12px) clamp(10px,1vw,14px); box-shadow: var(--glass-shadow-sm); }
+.legend-title { font-size: clamp(9px,0.8vw,10px); font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: clamp(5px,0.6vh,8px); }
+.legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: clamp(4px,0.5vh,6px); font-size: clamp(10px,0.9vw,12px); color: var(--text-secondary); }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.legend-line { width: 18px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+
+/* LOADER */
+#loader { position: fixed; inset: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 1; transition: opacity 0.5s; }
+#loader.hidden { opacity: 0; pointer-events: none; }
+.loader-content { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; }
+.loader-icon { width: 48px; height: 48px; background: linear-gradient(135deg,#007AFF,#5AC8FA); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.loader-spinner { width: 40px; height: 40px; border: 3px solid rgba(0,122,255,0.2); border-top-color: var(--apple-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.loader-text { margin-top: 12px; font-size: 13px; color: rgba(0,0,0,0.4); font-weight: 500; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ALGO OVERLAY */
+#algo-overlay { position: absolute; top: clamp(8px,1vh,16px); right: clamp(60px,7vw,70px); z-index: 99; display: none; }
+#algo-overlay.visible { display: block; }
+.algo-status { background: var(--glass-bg-ultra); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; box-shadow: var(--glass-shadow-sm); font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.algo-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--apple-blue); animation: algoPulse 1.2s ease-in-out infinite; }
+@keyframes algoPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.6; } }
+
+/* SCALE BAR */
+#scale-bar { position: absolute; bottom: clamp(8px,1vh,16px); right: clamp(60px,7vw,76px); z-index: 100; display: flex; align-items: flex-end; gap: 6px; }
+.scale-line { height: 10px; border-left: 2px solid rgba(0,0,0,0.4); border-right: 2px solid rgba(0,0,0,0.4); border-bottom: 2px solid rgba(0,0,0,0.4); width: 80px; }
+.scale-text { font-size: 10px; color: rgba(0,0,0,0.5); font-weight: 600; margin-bottom: -1px; }
+
+/* TOAST */
+#toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-80px); z-index: 500; transition: transform 0.4s var(--spring); }
+#toast.show { transform: translateX(-50%) translateY(0); }
+.toast-inner { background: rgba(30,30,30,0.88); backdrop-filter: blur(20px); border-radius: 14px; padding: 10px 18px; color: white; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+
+.separator { height: 1px; background: linear-gradient(90deg, transparent, rgba(0,0,0,0.08), transparent); margin: 0; }
+* { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.2) transparent; }
+#sidebar-scroll { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: clamp(6px,0.8vh,12px); min-height: 0; }
+
+/* Responsive for small screens */
+@media (max-width: 600px) {
+  :root { --sidebar-width: calc(100vw - 16px); }
+  #sidebar { bottom: auto; height: auto; max-height: 50vh; overflow-y: auto; }
+  #cy { top: calc(50vh); }
+  #topbar { top: calc(50vh + 8px); }
+  #compass { bottom: 20px; }
+  #zoom-controls { bottom: 70px; }
+  #route-card { left: 8px; right: 8px; bottom: 8px; }
+  #legend { top: calc(50vh + 60px); }
+}
+</style>
+</head>
+<body>
+<!-- Loading Screen -->
+<div id="loader">
+  <div class="loader-content">
+    <div class="loader-icon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+      </svg>
+    </div>
+    <div class="loader-spinner"></div>
+    <p class="loader-text">Loading Mumbai</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="terrain-lines"></div>
+  <div id="cy"></div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <!-- Header -->
+    <div class="glass-panel" id="header-panel">
+      <div style="position:relative;z-index:1">
+        <div style="padding:clamp(10px,1.2vh,18px) clamp(12px,1.2vw,20px) 0">
+          <div class="app-title">
+            <div class="app-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            </div>
+            <div class="title-text">
+              <h1>Mumbai Maps</h1>
+              <p>Shortest Path Finder</p>
+            </div>
+          </div>
+        </div>
+        <div class="status-bar">
+          <div class="status-indicator"></div>
+          <span class="status-text">Live Map — Select 2 locations</span>
+        </div>
+        <div class="info-chips">
+          <span class="chip">Mumbai, MH</span>
+          <span class="chip" id="node-count-chip">25 nodes</span>
+          <span class="chip" id="edge-count-chip">edges</span>
+        </div>
+        <div class="progress-steps">
+          <div class="prog-dot active" id="prog-0"></div>
+          <div class="prog-line"><div class="prog-fill" id="prog-line-0"></div></div>
+          <div class="prog-dot" id="prog-1"></div>
+          <div class="prog-line"><div class="prog-fill" id="prog-line-1"></div></div>
+          <div class="prog-dot" id="prog-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Panel -->
+    <div class="glass-panel" id="search-panel">
+      <div style="position:relative;z-index:1;padding:clamp(8px,1vh,14px) clamp(12px,1.2vw,16px)">
+        <div class="search-field" id="start-field" style="position:relative">
+          <div class="search-dot dot-start"></div>
+          <input class="search-input" id="start-input" placeholder="Choose start location" autocomplete="off" oninput="handleSearchInput('start')" onfocus="handleSearchFocus('start')" onblur="handleSearchBlur('start')">
+          <div class="autocomplete-dropdown" id="start-dropdown" style="display:none"></div>
+        </div>
+        <div class="search-connector">
+          <div class="connector-line" style="margin-left:4px;"></div>
+        </div>
+        <div class="search-field" id="end-field" style="margin-bottom:0;position:relative">
+          <div class="search-dot dot-end"></div>
+          <input class="search-input" id="end-input" placeholder="Choose end location" autocomplete="off" oninput="handleSearchInput('end')" onfocus="handleSearchFocus('end')" onblur="handleSearchBlur('end')">
+          <div class="autocomplete-dropdown" id="end-dropdown" style="display:none"></div>
+        </div>
+        <div class="route-options">
+          <button class="route-mode-btn active" data-mode="car" onclick="setRouteMode('car',this)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+            Drive
+          </button>
+          <button class="route-mode-btn" data-mode="transit" onclick="setRouteMode('transit',this)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h2l2-2h4l2 2h2v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zm0 2c3.51 0 5.5.58 6 1.5v2.5H6V6.5c.5-.92 2.49-1.5 6-1.5zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM6 10h12v3H6v-3z"/></svg>
+            Train
+          </button>
+          <button class="route-mode-btn" data-mode="walk" onclick="setRouteMode('walk',this)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>
+            Walk
+          </button>
+          <button class="route-mode-btn" data-mode="bike" onclick="setRouteMode('bike',this)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM5 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5S3.1 13.5 5 13.5 8.5 15.1 8.5 17 6.9 20.5 5 20.5zm5.8-10l2.4-2.4.8.8c1.3 1.3 3 2.1 5.1 2.1V11c-1.5 0-2.7-.6-3.6-1.5l-1.9-1.9c-.5-.4-1-.6-1.5-.6s-1 .2-1.3.6L7.8 10.4c-.4.4-.6.9-.6 1.4 0 .6.2 1.1.6 1.4L11 16v5h2v-6l-3.2-2.5 1-1.5zM19 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5zm0 8.5c-1.9 0-3.5-1.6-3.5-3.5s1.6-3.5 3.5-3.5 3.5 1.6 3.5 3.5-1.6 3.5-3.5 3.5z"/></svg>
+            Bike
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Algo Panel -->
+    <div class="glass-panel" id="algo-panel">
+      <div style="position:relative;z-index:1;padding:clamp(8px,1vh,14px) clamp(12px,1.2vw,16px)">
+        <div class="section-label">Algorithm</div>
+        <div class="algo-grid">
+          <div class="algo-btn active" data-algo="dijkstra" onclick="selectAlgo('dijkstra',this)">
+            <span class="algo-name">Dijkstra</span>
+            <span class="algo-desc">Optimal weighted paths</span>
+          </div>
+          <div class="algo-btn" data-algo="dfs" onclick="selectAlgo('dfs',this)">
+            <span class="algo-name">DFS</span>
+            <span class="algo-desc">Depth-first traversal</span>
+          </div>
+        </div>
+        <div style="padding-top:clamp(6px,0.7vh,10px)">
+          <div class="section-label">Graph Info</div>
+          <div class="graph-stat-row">
+            <span class="gstat-label">Nodes visited</span>
+            <span class="gstat-value" id="nodes-visited">—</span>
+          </div>
+          <div class="graph-stat-row">
+            <span class="gstat-label">Edges explored</span>
+            <span class="gstat-value" id="edges-explored">—</span>
+          </div>
+          <div class="graph-stat-row">
+            <span class="gstat-label">Path nodes</span>
+            <span class="gstat-value" id="path-nodes">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scrollable bottom area -->
+    <div id="sidebar-scroll">
+      <!-- Route Stats -->
+      <div class="glass-panel" id="stats-panel">
+        <div style="position:relative;z-index:1;padding:clamp(8px,1vh,16px)">
+          <div class="section-label" style="margin-bottom:clamp(6px,0.7vh,10px)">Route Summary</div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="stat-distance">—</div>
+              <div class="stat-label">Distance</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-time">—</div>
+              <div class="stat-label">Est. Time</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-stops">—</div>
+              <div class="stat-label">Stops</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-algo-time">—</div>
+              <div class="stat-label">Algo Speed</div>
+            </div>
+          </div>
+          <div class="separator"></div>
+          <div style="padding-top:clamp(6px,0.7vh,10px);display:flex;gap:8px;flex-wrap:wrap" id="route-badges"></div>
+        </div>
+      </div>
+
+      <!-- Directions -->
+      <div class="glass-panel" id="directions-panel">
+        <div class="directions-header" style="position:relative;z-index:1">Turn-by-Turn Directions</div>
+        <div class="directions-list" id="directions-list" style="position:relative;z-index:1"></div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="glass-panel" id="actions-panel-container">
+      <div style="position:relative;z-index:1">
+        <div style="padding:clamp(8px,1vh,12px) clamp(12px,1.2vw,16px);display:flex;gap:clamp(4px,0.5vw,8px)">
+          <button class="action-btn btn-primary" onclick="runCurrentAlgo()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+            Find Route
+          </button>
+          <button class="action-btn btn-secondary" onclick="animateStep()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M10 15l5-3-5-3v6z"/></svg>
+            Step
+          </button>
+          <button class="action-btn btn-danger" onclick="resetAll()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP RIGHT CONTROLS -->
+  <div id="topbar">
+    <div class="topbar-btn" onclick="toggleTraffic()" title="Traffic layer" id="traffic-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.65)" stroke-width="2">
+        <rect x="9" y="3" width="6" height="18" rx="3"/>
+        <circle cx="12" cy="7" r="1.5" fill="#FF3B30" stroke="none"/>
+        <circle cx="12" cy="12" r="1.5" fill="#FF9500" stroke="none"/>
+        <circle cx="12" cy="17" r="1.5" fill="#34C759" stroke="none"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Algo Processing Status -->
+  <div id="algo-overlay">
+    <div class="algo-status">
+      <div class="algo-pulse"></div>
+      <span id="algo-status-text">Running Dijkstra...</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div id="legend" class="visible">
+    <div class="legend-inner">
+      <div class="legend-title">Legend</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#34C759;box-shadow:0 0 4px rgba(52,199,89,0.5)"></div>Start point</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF3B30;box-shadow:0 0 4px rgba(255,59,48,0.5)"></div>End point</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#007AFF;box-shadow:0 0 4px rgba(0,122,255,0.5)"></div>Route node</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF9500"></div>Visited node</div>
+      <div class="legend-item"><div class="legend-line" style="background:#007AFF"></div>Shortest path</div>
+      <div class="legend-item"><div class="legend-line" style="background:rgba(0,0,0,0.2)"></div>Road edge</div>
+    </div>
+  </div>
+
+  <!-- Zoom Controls -->
+  <div id="zoom-controls">
+    <button class="zoom-btn" onclick="zoomIn()">+</button>
+    <button class="zoom-btn" onclick="zoomOut()">−</button>
+  </div>
+
+  <!-- Compass -->
+  <div id="compass">
+    <div class="compass-btn" onclick="resetNorth()" title="Reset north">
+      <svg width="22" height="22" viewBox="0 0 24 24" class="compass-needle">
+        <polygon points="12,2 14,10 12,12 10,10" fill="#FF3B30"/>
+        <polygon points="12,22 14,14 12,12 10,14" fill="rgba(0,0,0,0.35)"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Scale Bar -->
+  <div id="scale-bar">
+    <div class="scale-line"></div>
+    <span class="scale-text">5 km</span>
+  </div>
+
+  <!-- Node Tooltip -->
+  <div id="node-tooltip">
+    <div class="tooltip-bubble">
+      <div class="tooltip-name" id="tt-name">—</div>
+      <div class="tooltip-meta" id="tt-meta">Mumbai</div>
+      <div id="tt-badge"></div>
+    </div>
+  </div>
+
+  <!-- Route Card -->
+  <div id="route-card">
+    <div class="route-card-inner">
+      <div class="route-summary">
+        <div class="route-icon-lg">
+          <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99z"/></svg>
+        </div>
+        <div class="route-headline">
+          <div class="route-from-to" id="card-from-to">Start → End</div>
+          <div class="route-name" id="card-algo-name">Dijkstra Route</div>
+        </div>
+      </div>
+      <div class="route-metrics">
+        <div class="metric">
+          <span class="metric-icon">🗺</span>
+          <div class="metric-info">
+            <div class="metric-value" id="card-distance">—</div>
+            <div class="metric-label">Distance</div>
+          </div>
+        </div>
+        <div class="metric">
+          <span class="metric-icon">⏱</span>
+          <div class="metric-info">
+            <div class="metric-value" id="card-time">—</div>
+            <div class="metric-label">Drive time</div>
+          </div>
+        </div>
+        <div class="metric">
+          <span class="metric-icon">📍</span>
+          <div class="metric-info">
+            <div class="metric-value" id="card-stops">—</div>
+            <div class="metric-label">Waypoints</div>
+          </div>
+        </div>
+      </div>
+      <div class="route-card-actions">
+        <button class="action-btn btn-primary" style="flex:2" onclick="startNavigation()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+          Start Navigation
+        </button>
+        <button class="action-btn btn-secondary" onclick="document.getElementById('route-card').classList.remove('visible')">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"><div class="toast-inner" id="toast-text">Route found!</div></div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────
+const LOCATIONS = {
+  'Gateway of India':   { lat: 18.9220, lng: 72.8347, type: 'landmark', area: 'Colaba',          desc: 'Historic arch monument, 1924' },
+  'CST Station':        { lat: 18.9400, lng: 72.8353, type: 'transit',  area: 'Fort',             desc: 'UNESCO World Heritage Station' },
+  'Marine Drive':       { lat: 18.9321, lng: 72.8236, type: 'landmark', area: 'Nariman Point',    desc: "Queen's Necklace promenade" },
+  'Colaba':             { lat: 18.9067, lng: 72.8147, type: 'suburb',   area: 'Colaba',           desc: 'Historic southern tip' },
+  'Fort':               { lat: 18.9340, lng: 72.8360, type: 'business', area: 'Fort',             desc: 'Business & heritage district' },
+  'Churchgate':         { lat: 18.9353, lng: 72.8259, type: 'transit',  area: 'Nariman Point',    desc: 'Western Railway terminus' },
+  'Nariman Point':      { lat: 18.9254, lng: 72.8218, type: 'business', area: 'Nariman Point',    desc: 'Business district hub' },
+  'Lower Parel':        { lat: 18.9943, lng: 72.8326, type: 'business', area: 'Central Mumbai',   desc: 'Mill district reinvented' },
+  'Worli':              { lat: 19.0122, lng: 72.8171, type: 'business', area: 'Central Mumbai',   desc: 'Business & sea-link district' },
+  'Dadar':              { lat: 19.0186, lng: 72.8433, type: 'transit',  area: 'Central Mumbai',   desc: 'Major railway junction' },
+  'Matunga':            { lat: 19.0288, lng: 72.8620, type: 'suburb',   area: 'Central Mumbai',   desc: 'Cultural suburb' },
+  'Sion':               { lat: 19.0440, lng: 72.8658, type: 'suburb',   area: 'Central Mumbai',   desc: 'Ancient fort area' },
+  'Bandra':             { lat: 19.0596, lng: 72.8295, type: 'suburb',   area: 'Western Suburbs',  desc: 'Queen of Suburbs' },
+  'Santacruz':          { lat: 19.0839, lng: 72.8394, type: 'suburb',   area: 'Western Suburbs',  desc: 'Residential suburb' },
+  'Juhu Beach':         { lat: 19.0883, lng: 72.8265, type: 'beach',    area: 'Juhu',             desc: 'Famous beach on Arabian Sea' },
+  'Vile Parle':         { lat: 19.0990, lng: 72.8479, type: 'suburb',   area: 'Western Suburbs',  desc: 'Residential & commercial' },
+  'Andheri':            { lat: 19.1136, lng: 72.8697, type: 'suburb',   area: 'Western Suburbs',  desc: 'Commercial & airport hub' },
+  'Jogeshwari':         { lat: 19.1358, lng: 72.8493, type: 'suburb',   area: 'Western Suburbs',  desc: 'Western suburban locality' },
+  'Goregaon':           { lat: 19.1663, lng: 72.8526, type: 'suburb',   area: 'Western Suburbs',  desc: 'Film city district' },
+  'Malad':              { lat: 19.1872, lng: 72.8484, type: 'suburb',   area: 'Western Suburbs',  desc: 'Northern suburban hub' },
+  'BKC':                { lat: 19.0651, lng: 72.8638, type: 'business', area: 'Bandra-Kurla',     desc: 'Bandra-Kurla financial district' },
+  'Kurla':              { lat: 19.0726, lng: 72.8795, type: 'transit',  area: 'Central Suburbs',  desc: 'Major junction station' },
+  'Ghatkopar':          { lat: 19.0860, lng: 72.9081, type: 'suburb',   area: 'Eastern Suburbs',  desc: 'Eastern metro hub' },
+  'Chembur':            { lat: 19.0622, lng: 72.9005, type: 'suburb',   area: 'Eastern Suburbs',  desc: 'Eastern suburban junction' },
+  'Powai':              { lat: 19.1207, lng: 72.9060, type: 'suburb',   area: 'Eastern Suburbs',  desc: 'IT & education hub' },
+  'Vikhroli':           { lat: 19.1073, lng: 72.9260, type: 'suburb',   area: 'Eastern Suburbs',  desc: 'Eastern industrial suburb' },
+  'Mulund':             { lat: 19.1726, lng: 72.9537, type: 'suburb',   area: 'Eastern Suburbs',  desc: 'Gateway to Mumbai' },
+  'Thane':              { lat: 19.2183, lng: 72.9781, type: 'city',     area: 'Thane District',   desc: 'City of lakes' },
+  'Navi Mumbai':        { lat: 19.0330, lng: 73.0297, type: 'city',     area: 'Navi Mumbai',      desc: 'Planned township east' },
+  'Airoli':             { lat: 19.1569, lng: 72.9990, type: 'suburb',   area: 'Navi Mumbai',      desc: 'Navi Mumbai IT hub' },
+};
+
+const EDGES = [
+  { source: 'Gateway of India', target: 'CST Station',    weight: 2,  road: 'MG Road' },
+  { source: 'Gateway of India', target: 'Marine Drive',   weight: 4,  road: 'Cuffe Parade Road' },
+  { source: 'Gateway of India', target: 'Colaba',         weight: 2,  road: 'Colaba Causeway' },
+  { source: 'CST Station',      target: 'Marine Drive',   weight: 3,  road: 'Marine Lines' },
+  { source: 'CST Station',      target: 'Fort',           weight: 1,  road: 'DN Road' },
+  { source: 'CST Station',      target: 'Churchgate',     weight: 2,  road: 'Veer Nariman Road' },
+  { source: 'CST Station',      target: 'Lower Parel',    weight: 5,  road: 'NM Joshi Marg' },
+  { source: 'CST Station',      target: 'Dadar',          weight: 9,  road: 'Ambedkar Road' },
+  { source: 'Colaba',           target: 'Nariman Point',  weight: 3,  road: 'Marine Drive Spur' },
+  { source: 'Fort',             target: 'Churchgate',     weight: 2,  road: 'MG Road' },
+  { source: 'Churchgate',       target: 'Marine Drive',   weight: 2,  road: 'Marine Drive' },
+  { source: 'Churchgate',       target: 'Nariman Point',  weight: 2,  road: 'Nariman Point Road' },
+  { source: 'Marine Drive',     target: 'Worli',          weight: 7,  road: 'Worli Seaface Road' },
+  { source: 'Marine Drive',     target: 'Lower Parel',    weight: 6,  road: 'Annie Besant Road' },
+  { source: 'Lower Parel',      target: 'Worli',          weight: 3,  road: 'Tulsi Pipe Road' },
+  { source: 'Lower Parel',      target: 'Dadar',          weight: 4,  road: 'LJ Road' },
+  { source: 'Worli',            target: 'Bandra',         weight: 6,  road: 'Bandra-Worli Sea Link' },
+  { source: 'Dadar',            target: 'Bandra',         weight: 7,  road: 'Western Express Hwy' },
+  { source: 'Dadar',            target: 'Matunga',        weight: 3,  road: 'Tilak Road' },
+  { source: 'Dadar',            target: 'Sion',           weight: 4,  road: 'Sion Rd' },
+  { source: 'Dadar',            target: 'Chembur',        weight: 8,  road: 'Tilak Road East' },
+  { source: 'Matunga',          target: 'Sion',           weight: 3,  road: 'Matunga Road' },
+  { source: 'Matunga',          target: 'BKC',            weight: 5,  road: 'Eastern Freeway' },
+  { source: 'Sion',             target: 'Kurla',          weight: 4,  road: 'Sion-Kurla Rd' },
+  { source: 'Sion',             target: 'Chembur',        weight: 5,  road: 'Sion-Panvel Hwy' },
+  { source: 'Bandra',           target: 'BKC',            weight: 4,  road: 'BKC Connector' },
+  { source: 'Bandra',           target: 'Santacruz',      weight: 4,  road: 'SV Road' },
+  { source: 'Bandra',           target: 'Juhu Beach',     weight: 6,  road: 'SV Road North' },
+  { source: 'Bandra',           target: 'Andheri',        weight: 9,  road: 'Western Express Hwy' },
+  { source: 'BKC',              target: 'Kurla',          weight: 3,  road: 'BKC Road' },
+  { source: 'BKC',              target: 'Andheri',        weight: 8,  road: 'JVLR' },
+  { source: 'BKC',              target: 'Chembur',        weight: 6,  road: 'Eastern Express Hwy' },
+  { source: 'BKC',              target: 'Powai',          weight: 7,  road: 'LBS Marg' },
+  { source: 'Santacruz',        target: 'Juhu Beach',     weight: 3,  road: 'Juhu Road' },
+  { source: 'Santacruz',        target: 'Vile Parle',     weight: 3,  road: 'SV Road' },
+  { source: 'Juhu Beach',       target: 'Vile Parle',     weight: 3,  road: 'Juhu-Versova Rd' },
+  { source: 'Juhu Beach',       target: 'Andheri',        weight: 4,  road: 'Juhu-Versova Road' },
+  { source: 'Vile Parle',       target: 'Andheri',        weight: 3,  road: 'SV Road North' },
+  { source: 'Andheri',          target: 'Jogeshwari',     weight: 4,  road: 'WEH' },
+  { source: 'Andheri',          target: 'Powai',          weight: 6,  road: 'JVLR East' },
+  { source: 'Andheri',          target: 'Ghatkopar',      weight: 7,  road: 'Andheri-Ghatkopar Metro' },
+  { source: 'Jogeshwari',       target: 'Goregaon',       weight: 4,  road: 'WEH North' },
+  { source: 'Goregaon',         target: 'Malad',          weight: 4,  road: 'SV Road' },
+  { source: 'Kurla',            target: 'Ghatkopar',      weight: 4,  road: 'LBS Marg' },
+  { source: 'Kurla',            target: 'Chembur',        weight: 5,  road: 'Kurla-Chembur Rd' },
+  { source: 'Ghatkopar',        target: 'Vikhroli',       weight: 5,  road: 'LBS Marg East' },
+  { source: 'Chembur',          target: 'Navi Mumbai',    weight: 14, road: 'Sion-Panvel Hwy' },
+  { source: 'Chembur',          target: 'Powai',          weight: 8,  road: 'Eastern Freeway' },
+  { source: 'Powai',            target: 'Vikhroli',       weight: 4,  road: 'LBS Powai Link' },
+  { source: 'Powai',            target: 'Thane',          weight: 12, road: 'LBS-Powai Link' },
+  { source: 'Vikhroli',         target: 'Mulund',         weight: 6,  road: 'LBS Marg' },
+  { source: 'Mulund',           target: 'Thane',          weight: 6,  road: 'LBS Road' },
+  { source: 'Thane',            target: 'Navi Mumbai',    weight: 20, road: 'Thane-Belapur Road' },
+  { source: 'Thane',            target: 'Airoli',         weight: 8,  road: 'Thane-Airoli Road' },
+  { source: 'Navi Mumbai',      target: 'Airoli',         weight: 12, road: 'Palm Beach Road' },
+  { source: 'Malad',            target: 'Andheri',        weight: 8,  road: 'WEH South' },
+];
+
+// Build cytoscape elements
+const cyElements = [];
+Object.keys(LOCATIONS).forEach(id => {
+  cyElements.push({ data: { id, ...LOCATIONS[id] } });
+});
+EDGES.forEach(e => {
+  cyElements.push({ data: { id: e.source+'_'+e.target, source: e.source, target: e.target, weight: e.weight, road: e.road } });
+  cyElements.push({ data: { id: e.target+'_'+e.source, source: e.target, target: e.source, weight: e.weight, road: e.road } });
+});
+
+// ── STATE ──────────────────────────────────────────────────────
+let startNode = null, endNode = null;
+let currentAlgo = 'dijkstra';
+let currentRouteMode = 'car';
+let routePath = [];
+let stepIndex = 0;
+let trafficEnabled = false;
+
+const SPEED_KMH = { car: 30, transit: 40, walk: 5, bike: 15 };
+const SPEED_LABEL = { car: 'Drive', transit: 'Train', walk: 'Walk', bike: 'Cycle' };
+
+// ── CYTOSCAPE INIT ──────────────────────────────────────────────
+const cy = cytoscape({
+  container: document.getElementById('cy'),
+  elements: cyElements,
+  style: [
+    {
+      selector: 'node',
+      style: {
+        'background-color': '#ffffff',
+        'border-color': 'rgba(0,0,0,0.18)',
+        'border-width': 2,
+        'label': 'data(id)',
+        'color': '#111827',
+        'width': 32, 'height': 32,
+        'text-valign': 'bottom',
+        'text-margin-y': 5,
+        'font-size': 9,
+        'font-weight': '500',
+        'font-family': '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
+        'text-background-color': 'rgba(255,255,255,0.85)',
+        'text-background-opacity': 1,
+        'text-background-padding': '2px',
+        'text-background-shape': 'roundrectangle',
+        'text-border-opacity': 0,
+        'overlay-opacity': 0,
+        'transition-property': 'background-color, border-color, border-width, width, height',
+        'transition-duration': '0.3s',
+        'transition-timing-function': 'ease'
+      }
+    },
+    { selector: 'node[type = "landmark"]', style: { 'background-color': '#FFE5B4', 'border-color': '#FF9500' } },
+    { selector: 'node[type = "transit"]',  style: { 'background-color': '#D4EAFF', 'border-color': '#007AFF' } },
+    { selector: 'node[type = "beach"]',    style: { 'background-color': '#C8F5E4', 'border-color': '#34C759' } },
+    { selector: 'node[type = "business"]', style: { 'background-color': '#EDE4FF', 'border-color': '#AF52DE' } },
+    { selector: 'node[type = "suburb"]',   style: { 'background-color': '#FFE8CC', 'border-color': '#FF6B00' } },
+    { selector: 'node[type = "city"]',     style: { 'background-color': '#FFF0E0', 'border-color': '#FF9500' } },
+    {
+      selector: 'edge',
+      style: {
+        'width': 2,
+        'line-color': 'rgba(255,255,255,0.85)',
+        'target-arrow-shape': 'none',
+        'curve-style': 'bezier',
+        'label': 'data(weight)',
+        'font-size': 8,
+        'color': 'rgba(0,0,0,0.5)',
+        'text-background-color': 'rgba(255,255,255,0.7)',
+        'text-background-opacity': 1,
+        'text-background-padding': '2px',
+        'text-background-shape': 'roundrectangle',
+        'overlay-opacity': 0,
+        'transition-property': 'line-color, width',
+        'transition-duration': '0.3s'
+      }
+    },
+    { selector: '.node-start', style: { 'background-color': '#34C759', 'border-color': '#25A244', 'border-width': 3, 'width': 38, 'height': 38, 'color': '#fff', 'text-background-color': '#25A244' } },
+    { selector: '.node-end',   style: { 'background-color': '#FF3B30', 'border-color': '#C62821', 'border-width': 3, 'width': 38, 'height': 38, 'color': '#fff', 'text-background-color': '#C62821' } },
+    { selector: '.node-route', style: { 'background-color': '#007AFF', 'border-color': '#005FBF', 'border-width': 3, 'width': 34, 'height': 34, 'color': '#fff', 'text-background-color': '#005FBF' } },
+    { selector: '.node-visited', style: { 'background-color': '#FF9500', 'border-color': '#CC7700', 'border-width': 2, 'width': 30, 'height': 30 } },
+    { selector: '.edge-route', style: { 'line-color': '#007AFF', 'width': 5, 'line-style': 'solid', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#007AFF', 'curve-style': 'bezier', 'z-index': 10 } },
+    { selector: '.edge-visited', style: { 'line-color': '#FF9500', 'width': 2, 'line-style': 'dashed', 'line-dash-pattern': [6, 4] } },
+    { selector: 'node:selected', style: { 'overlay-opacity': 0.08, 'overlay-color': '#007AFF' } }
+  ],
+  layout: { name: 'preset' },
+  userZoomingEnabled: true,
+  userPanningEnabled: true,
+  boxSelectionEnabled: false,
+  minZoom: 0.2,
+  maxZoom: 5
+});
+
+// ── LAYOUT ──────────────────────────────────────────────────────
+function latLngToCanvas(lat, lng) {
+  const minLat = 18.89, maxLat = 19.27;
+  const minLng = 72.80, maxLng = 73.06;
+  const sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 320;
+  const w = window.innerWidth - sidebarW - 40;
+  const h = window.innerHeight - 40;
+  const x = ((lng - minLng) / (maxLng - minLng)) * (w - 80) + 40;
+  const y = ((maxLat - lat) / (maxLat - minLat)) * (h - 80) + 40;
+  return { x, y };
+}
+
+cy.nodes().forEach(node => {
+  const loc = LOCATIONS[node.id()];
+  if (loc) {
+    const pos = latLngToCanvas(loc.lat, loc.lng);
+    node.position(pos);
+  }
+});
+
+cy.fit(cy.nodes(), 40);
+
+// Update edge count chip
+document.getElementById('edge-count-chip').textContent = EDGES.length + ' edges';
+
+// ── AUTOCOMPLETE ─────────────────────────────────────────────
+const locationNames = Object.keys(LOCATIONS);
+
+function handleSearchInput(type) {
+  const input = document.getElementById(type + '-input');
+  const dropdown = document.getElementById(type + '-dropdown');
+  const val = input.value.trim().toLowerCase();
+  if (!val) { dropdown.style.display = 'none'; return; }
+  const matches = locationNames.filter(n => n.toLowerCase().includes(val)).slice(0, 6);
+  if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = matches.map(name => {
+    const loc = LOCATIONS[name];
+    return `<div class="autocomplete-item" onmousedown="selectLocation('${type}', '${name}')">${name}<span class="item-area">${loc.area}</span></div>`;
+  }).join('');
+  dropdown.style.display = 'block';
+}
+
+function handleSearchFocus(type) {
+  const input = document.getElementById(type + '-input');
+  const val = input.value.trim().toLowerCase();
+  if (!val) {
+    // Show all on focus if empty
+    const dropdown = document.getElementById(type + '-dropdown');
+    const items = locationNames.slice(0, 8).map(name => {
+      const loc = LOCATIONS[name];
+      return `<div class="autocomplete-item" onmousedown="selectLocation('${type}', '${name}')">${name}<span class="item-area">${loc.area}</span></div>`;
+    }).join('');
+    dropdown.innerHTML = items;
+    dropdown.style.display = 'block';
+  }
+}
+
+function handleSearchBlur(type) {
+  setTimeout(() => {
+    document.getElementById(type + '-dropdown').style.display = 'none';
+  }, 200);
+}
+
+function selectLocation(type, name) {
+  const input = document.getElementById(type + '-input');
+  input.value = name;
+  input.classList.add('filled');
+  document.getElementById(type + '-dropdown').style.display = 'none';
+  document.getElementById(type + '-field').classList.add('active');
+
+  if (type === 'start') {
+    if (startNode) cy.getElementById(startNode).removeClass('node-start');
+    startNode = name;
+    cy.getElementById(name).addClass('node-start');
+    updateProgress(1);
+    document.getElementById('prog-line-0').style.width = '100%';
+    document.getElementById('prog-1').classList.add('active');
+    document.getElementById('prog-0').classList.remove('active');
+    document.getElementById('prog-0').classList.add('done');
+    showToast('📍 Start: ' + name);
+  } else {
+    if (endNode) cy.getElementById(endNode).removeClass('node-end');
+    endNode = name;
+    cy.getElementById(name).addClass('node-end');
+    updateProgress(2);
+    document.getElementById('prog-line-1').style.width = '100%';
+    document.getElementById('prog-2').classList.add('active');
+    document.getElementById('prog-1').classList.remove('active');
+    document.getElementById('prog-1').classList.add('done');
+    showToast('🏁 End: ' + name);
+  }
+  if (startNode && endNode) setTimeout(runCurrentAlgo, 400);
+}
+
+// ── EVENTS ─────────────────────────────────────────────────────
+cy.on('tap', 'node', function(evt) {
+  const node = evt.target;
+  const nodeId = node.id();
+  if (!startNode) {
+    startNode = nodeId;
+    cy.getElementById(nodeId).addClass('node-start');
+    document.getElementById('start-input').value = nodeId;
+    document.getElementById('start-input').classList.add('filled');
+    document.getElementById('start-field').classList.add('active');
+    updateProgress(1);
+    showToast('📍 Start: ' + nodeId);
+    document.getElementById('prog-line-0').style.width = '100%';
+    document.getElementById('prog-1').classList.add('active');
+    document.getElementById('prog-0').classList.remove('active');
+    document.getElementById('prog-0').classList.add('done');
+  } else if (!endNode && nodeId !== startNode) {
+    endNode = nodeId;
+    cy.getElementById(nodeId).addClass('node-end');
+    document.getElementById('end-input').value = nodeId;
+    document.getElementById('end-input').classList.add('filled');
+    document.getElementById('end-field').classList.add('active');
+    updateProgress(2);
+    showToast('🏁 End: ' + nodeId);
+    document.getElementById('prog-line-1').style.width = '100%';
+    document.getElementById('prog-2').classList.add('active');
+    document.getElementById('prog-1').classList.remove('active');
+    document.getElementById('prog-1').classList.add('done');
+    setTimeout(runCurrentAlgo, 400);
+  } else if (startNode && endNode) {
+    resetAll();
+    startNode = nodeId;
+    cy.getElementById(nodeId).addClass('node-start');
+    document.getElementById('start-input').value = nodeId;
+    document.getElementById('start-input').classList.add('filled');
+    document.getElementById('start-field').classList.add('active');
+    document.getElementById('prog-line-0').style.width = '100%';
+    document.getElementById('prog-1').classList.add('active');
+    document.getElementById('prog-0').classList.add('done');
+    showToast('📍 New start: ' + nodeId);
+  }
+});
+
+cy.on('mouseover', 'node', function(evt) {
+  const node = evt.target;
+  const nodeId = node.id();
+  const loc = LOCATIONS[nodeId];
+  const rendPos = node.renderedPosition();
+  document.getElementById('tt-name').textContent = nodeId;
+  document.getElementById('tt-meta').textContent = (loc ? loc.area + ' · ' + loc.desc : 'Mumbai');
+  const badge = document.getElementById('tt-badge');
+  if (nodeId === startNode) badge.innerHTML = '<span class="tooltip-badge badge-start">Start</span>';
+  else if (nodeId === endNode) badge.innerHTML = '<span class="tooltip-badge badge-end">End</span>';
+  else if (routePath.includes(nodeId)) badge.innerHTML = '<span class="tooltip-badge badge-route">On Route</span>';
+  else badge.innerHTML = '';
+  const sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 320;
+  const tt = document.getElementById('node-tooltip');
+  tt.style.left = (rendPos.x + sidebarW + 30) + 'px';
+  tt.style.top = (rendPos.y - 20) + 'px';
+  tt.classList.add('visible');
+});
+
+cy.on('mouseout', 'node', function() {
+  document.getElementById('node-tooltip').classList.remove('visible');
+});
+
+cy.on('mouseover', 'edge', function(evt) {
+  const edge = evt.target;
+  if (!edge.hasClass('edge-route')) edge.style({ 'line-color': 'rgba(255,255,255,1)', 'width': 3 });
+});
+cy.on('mouseout', 'edge', function(evt) {
+  const edge = evt.target;
+  if (!edge.hasClass('edge-route')) edge.removeStyle();
+});
+
+// ── ALGORITHMS ─────────────────────────────────────────────────
+function dijkstra(start, end) {
+  const dist = {}, prev = {}, visited = new Set();
+  const nodesVisited = [], edgesExplored = [];
+  cy.nodes().forEach(n => dist[n.id()] = Infinity);
+  dist[start] = 0;
+  const unvisited = new Set(cy.nodes().map(n => n.id()));
+  while (unvisited.size > 0) {
+    const u = [...unvisited].reduce((a, b) => dist[a] < dist[b] ? a : b);
+    if (dist[u] === Infinity) break;
+    unvisited.delete(u);
+    visited.add(u);
+    nodesVisited.push(u);
+    if (u === end) break;
+    cy.getElementById(u).connectedEdges().forEach(edge => {
+      const v = edge.target().id() === u ? edge.source().id() : edge.target().id();
+      if (!unvisited.has(v)) return;
+      const alt = dist[u] + edge.data('weight');
+      edgesExplored.push(edge.id());
+      if (alt < dist[v]) { dist[v] = alt; prev[v] = u; }
+    });
+  }
+  return { dist, prev, nodesVisited, edgesExplored };
+}
+
+function dfs(start, end) {
+  const dist = {}, prev = {}, visited = new Set();
+  const nodesVisited = [], edgesExplored = [];
+  cy.nodes().forEach(n => dist[n.id()] = Infinity);
+  dist[start] = 0;
+  const stack = [start];
+  while (stack.length > 0) {
+    const u = stack.pop();
+    if (visited.has(u)) continue;
+    visited.add(u);
+    nodesVisited.push(u);
+    if (u === end) break;
+    cy.getElementById(u).connectedEdges().forEach(edge => {
+      const v = edge.target().id() === u ? edge.source().id() : edge.target().id();
+      edgesExplored.push(edge.id());
+      if (!visited.has(v)) {
+        dist[v] = dist[u] + edge.data('weight');
+        prev[v] = u;
+        stack.push(v);
+      }
+    });
+  }
+  return { dist, prev, nodesVisited, edgesExplored };
+}
+
+function extractPath(prev, start, end) {
+  const path = [];
+  let u = end;
+  while (prev[u]) { path.unshift(u); u = prev[u]; }
+  if (u === start) path.unshift(start);
+  return path;
+}
+
+// ── RUN ALGORITHM ──────────────────────────────────────────────
+function runCurrentAlgo() {
+  if (!startNode || !endNode) { showToast('⚠ Please select start and end points'); return; }
+  cy.elements().removeClass('node-route edge-route node-visited edge-visited');
+  cy.getElementById(startNode).addClass('node-start');
+  cy.getElementById(endNode).addClass('node-end');
+  document.getElementById('algo-overlay').classList.add('visible');
+  document.getElementById('algo-status-text').textContent = 'Running ' + currentAlgo.charAt(0).toUpperCase() + currentAlgo.slice(1) + '...';
+  const t0 = performance.now();
+  let result;
+  if (currentAlgo === 'dijkstra') result = dijkstra(startNode, endNode);
+  else if (currentAlgo === 'dfs') result = dfs(startNode, endNode);
+  const t1 = performance.now();
+  const algoMs = (t1 - t0).toFixed(2);
+  const { dist, prev, nodesVisited, edgesExplored } = result;
+  routePath = extractPath(prev, startNode, endNode);
+  if (routePath.length < 2) {
+    showToast('❌ No path found between these locations');
+    document.getElementById('algo-overlay').classList.remove('visible');
+    return;
+  }
+  const totalDist = dist[endNode];
+  const speedKmh = SPEED_KMH[currentRouteMode];
+  const timeMin = Math.round((totalDist / speedKmh) * 60);
+  const timeStr = timeMin >= 60 ? Math.floor(timeMin/60)+'h ' + (timeMin%60) + 'min' : timeMin + ' min';
+  animateRouteReveal(nodesVisited, edgesExplored, routePath, totalDist, timeStr, algoMs);
+  document.getElementById('stat-distance').innerHTML = totalDist + '<span class="stat-unit"> km</span>';
+  document.getElementById('stat-time').innerHTML = timeStr;
+  document.getElementById('stat-stops').textContent = routePath.length - 2;
+  document.getElementById('stat-algo-time').innerHTML = algoMs + '<span class="stat-unit">ms</span>';
+  document.getElementById('nodes-visited').textContent = nodesVisited.length;
+  document.getElementById('edges-explored').textContent = edgesExplored.length;
+  document.getElementById('path-nodes').textContent = routePath.length;
+  document.getElementById('stats-panel').classList.add('visible');
+  document.getElementById('directions-panel').classList.add('visible');
+  const badgeContainer = document.getElementById('route-badges');
+  const algoColors = { dijkstra:'#007AFF', dfs:'#FF9500' };
+  const color = algoColors[currentAlgo] || '#007AFF';
+  badgeContainer.innerHTML = `
+    <span style="padding:3px 10px;background:${color}20;border:1px solid ${color}40;border-radius:20px;font-size:11px;font-weight:600;color:${color}">${currentAlgo.toUpperCase()}</span>
+    <span style="padding:3px 10px;background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.1);border-radius:20px;font-size:11px;font-weight:500;color:rgba(0,0,0,0.5)">${SPEED_LABEL[currentRouteMode]}</span>
+    ${trafficEnabled ? '<span style="padding:3px 10px;background:rgba(255,59,48,0.1);border:1px solid rgba(255,59,48,0.2);border-radius:20px;font-size:11px;font-weight:500;color:#FF3B30">Traffic</span>' : ''}
+  `;
+  document.getElementById('card-from-to').textContent = startNode + ' → ' + endNode;
+  document.getElementById('card-algo-name').textContent = currentAlgo.charAt(0).toUpperCase() + currentAlgo.slice(1) + ' Route';
+  document.getElementById('card-distance').textContent = totalDist + ' km';
+  document.getElementById('card-time').textContent = timeStr;
+  document.getElementById('card-stops').textContent = routePath.length - 2;
+  setTimeout(() => document.getElementById('route-card').classList.add('visible'), 600);
+  buildDirections(routePath);
+}
+
+function animateRouteReveal(nodesVisited, edgesExplored, path, totalDist, timeStr, algoMs) {
+  nodesVisited.forEach((nodeId, i) => {
+    setTimeout(() => {
+      if (nodeId !== startNode && nodeId !== endNode && !path.includes(nodeId)) {
+        cy.getElementById(nodeId).addClass('node-visited');
+      }
+    }, i * 40);
+  });
+  const totalDelay = nodesVisited.length * 40 + 200;
+  setTimeout(() => {
+    document.getElementById('algo-overlay').classList.remove('visible');
+    cy.elements().removeClass('node-visited edge-visited');
+    for (let i = 0; i < path.length; i++) {
+      setTimeout(() => {
+        const nodeId = path[i];
+        if (nodeId !== startNode && nodeId !== endNode) cy.getElementById(nodeId).addClass('node-route');
+        if (i > 0) {
+          const prev = path[i-1];
+          cy.edges(`[source="${prev}"][target="${nodeId}"]`).addClass('edge-route');
+          cy.edges(`[source="${nodeId}"][target="${prev}"]`).addClass('edge-route');
+        }
+      }, i * 180);
+    }
+    setTimeout(() => showToast(`✅ Route found: ${totalDist} km · ${timeStr}`), path.length * 180);
+  }, totalDelay);
+}
+
+function buildDirections(path) {
+  const list = document.getElementById('directions-list');
+  list.innerHTML = '';
+  const roadData = {};
+  EDGES.forEach(e => { roadData[e.source+'|'+e.target] = e.road; roadData[e.target+'|'+e.source] = e.road; });
+  path.forEach((nodeId, i) => {
+    const isFirst = i === 0, isLast = i === path.length - 1;
+    const item = document.createElement('div');
+    item.className = 'direction-item';
+    item.setAttribute('data-node', nodeId);
+    let dist = 0;
+    if (i < path.length - 1) {
+      const nextId = path[i+1];
+      const edge = cy.edges(`[source="${nodeId}"][target="${nextId}"]`);
+      dist = edge.length > 0 ? edge.data('weight') : 0;
+    }
+    const road = i < path.length - 1 ? (roadData[nodeId+'|'+path[i+1]] || 'Local Road') : '';
+    const loc = LOCATIONS[nodeId] || {};
+    const iconColor = isFirst ? '#34C759' : isLast ? '#FF3B30' : '#007AFF';
+    item.innerHTML = `
+      <div class="step-icon" style="background:${iconColor}20">
+        <svg viewBox="0 0 24 24" fill="${iconColor}" width="13" height="13">
+          ${isFirst ? '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>' : isLast ? '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>' : '<path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>'}
+        </svg>
+      </div>
+      <div class="step-info">
+        <div class="step-name">${isFirst ? 'Depart from' : isLast ? 'Arrive at' : 'Continue via'} ${nodeId}</div>
+        <div class="step-detail">${road ? 'Via ' + road : ''} ${loc.area ? '· ' + loc.area : ''}</div>
+      </div>
+      ${!isLast && dist > 0 ? `<div class="step-dist">${dist} km</div>` : ''}
+    `;
+    item.addEventListener('click', () => {
+      cy.getElementById(nodeId).select();
+      cy.animate({ center: { eles: cy.getElementById(nodeId) }, zoom: 1.8 }, { duration: 500 });
+      document.querySelectorAll('.direction-item').forEach(el => el.classList.remove('active-step'));
+      item.classList.add('active-step');
+    });
+    list.appendChild(item);
+    setTimeout(() => item.classList.add('revealed'), i * 80 + 400);
+  });
+}
+
+function animateStep() {
+  if (!startNode || !endNode) { showToast('⚠ Select start and end first'); return; }
+  if (routePath.length === 0) { runCurrentAlgo(); return; }
+  if (stepIndex < routePath.length) {
+    const nodeId = routePath[stepIndex];
+    cy.getElementById(nodeId).addClass(nodeId === startNode ? 'node-start' : nodeId === endNode ? 'node-end' : 'node-route');
+    if (stepIndex > 0) {
+      const prev = routePath[stepIndex - 1];
+      cy.edges(`[source="${prev}"][target="${nodeId}"]`).addClass('edge-route');
+      cy.edges(`[source="${nodeId}"][target="${prev}"]`).addClass('edge-route');
+    }
+    cy.animate({ center: { eles: cy.getElementById(nodeId) }, zoom: 1.6 }, { duration: 400 });
+    stepIndex++;
+    showToast(`Step ${stepIndex}: ${nodeId}`);
+    document.querySelectorAll('.direction-item').forEach(el => el.classList.remove('active-step'));
+    const dirItem = document.querySelector(`.direction-item[data-node="${nodeId}"]`);
+    if (dirItem) { dirItem.classList.add('active-step'); dirItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  } else {
+    showToast('✅ Route complete!');
+    stepIndex = 0;
+  }
+}
+
+function updateProgress(step) {}
+
+function selectAlgo(algo, el) {
+  currentAlgo = algo;
+  document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (startNode && endNode) runCurrentAlgo();
+}
+
+function setRouteMode(mode, el) {
+  currentRouteMode = mode;
+  document.querySelectorAll('.route-mode-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (startNode && endNode) runCurrentAlgo();
+}
+
+function resetAll() {
+  startNode = null; endNode = null;
+  routePath = []; stepIndex = 0;
+  cy.elements().removeClass('node-start node-end node-route edge-route node-visited edge-visited');
+  document.getElementById('start-input').value = '';
+  document.getElementById('end-input').value = '';
+  document.getElementById('start-input').classList.remove('filled');
+  document.getElementById('end-input').classList.remove('filled');
+  document.getElementById('start-field').classList.remove('active');
+  document.getElementById('end-field').classList.remove('active');
+  document.getElementById('stats-panel').classList.remove('visible');
+  document.getElementById('directions-panel').classList.remove('visible');
+  document.getElementById('route-card').classList.remove('visible');
+  document.getElementById('directions-list').innerHTML = '';
+  ['prog-0','prog-1','prog-2'].forEach(id => document.getElementById(id).classList.remove('done','active'));
+  document.getElementById('prog-0').classList.add('active');
+  document.getElementById('prog-line-0').style.width = '0%';
+  document.getElementById('prog-line-1').style.width = '0%';
+  ['stat-distance','stat-time','stat-stops','stat-algo-time','nodes-visited','edges-explored','path-nodes'].forEach(id => document.getElementById(id).textContent = '—');
+  showToast('🔄 Map reset');
+}
+
+function zoomIn()  { cy.animate({ zoom: cy.zoom() * 1.3, center: { x: cy.width()/2, y: cy.height()/2 }}, { duration: 300 }); }
+function zoomOut() { cy.animate({ zoom: cy.zoom() * 0.75, center: { x: cy.width()/2, y: cy.height()/2 }}, { duration: 300 }); }
+function resetNorth() { cy.animate({ fit: { eles: cy.nodes(), padding: 40 }}, { duration: 500 }); showToast('🧭 View reset'); }
+
+function toggleTraffic() {
+  trafficEnabled = !trafficEnabled;
+  const btn = document.getElementById('traffic-btn');
+  if (trafficEnabled) {
+    btn.style.background = 'rgba(255,59,48,0.15)';
+    btn.style.borderColor = 'rgba(255,59,48,0.3)';
+    cy.edges().forEach(edge => {
+      const jitter = 0.8 + Math.random() * 0.6;
+      edge.style({ 'line-color': jitter > 1.2 ? 'rgba(255,59,48,0.7)' : jitter > 1.0 ? 'rgba(255,149,0,0.7)' : 'rgba(52,199,89,0.7)', 'width': jitter > 1.2 ? 4 : 2 });
+    });
+    showToast('🚦 Traffic layer on');
+    if (startNode && endNode) runCurrentAlgo();
+  } else {
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    cy.edges().forEach(edge => { if (!edge.hasClass('edge-route')) edge.removeStyle(); });
+    showToast('🚦 Traffic layer off');
+  }
+}
+
+function startNavigation() {
+  if (!routePath.length) return;
+  showToast('🧭 Navigation started!');
+  document.getElementById('route-card').classList.remove('visible');
+  stepIndex = 0;
+  const interval = setInterval(() => {
+    if (stepIndex >= routePath.length) { clearInterval(interval); showToast('✅ Arrived!'); return; }
+    animateStep();
+  }, 1200);
+}
+
+let toastTimer;
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  document.getElementById('toast-text').textContent = msg;
+  document.getElementById('toast').classList.add('show');
+  toastTimer = setTimeout(() => document.getElementById('toast').classList.remove('show'), 2800);
+}
+
+// Hide loader
+window.addEventListener('load', () => {
+  setTimeout(() => document.getElementById('loader').classList.add('hidden'), 800);
+});
+</script>
+</body>
+</html>
